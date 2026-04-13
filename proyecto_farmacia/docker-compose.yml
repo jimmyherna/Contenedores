@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # 1. La Base de Datos Geoespacial
+  db_farmacias:
+    image: postgis/postgis:15-3.3
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: farmacia123
+      POSTGRES_DB: farmacia_db
+    volumes:
+      - datos_db:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - red_farmacias
+
+  # 2. Tu API de Python (FastAPI)
+  api_farmacias:
+    build: ./app
+    environment:
+      DB_HOST: db_farmacias
+      DB_NAME: farmacia_db
+      DB_USER: admin
+      DB_PASS: farmacia123
+    depends_on:
+      - db_farmacias
+    networks:
+      - red_farmacias
+
+  # 3. El Servidor Web que muestra el mapa y redirige a la API
+  proxy_farmacias:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./web:/usr/share/nginx/html:ro
+    depends_on:
+      - api_farmacias
+    networks:
+      - red_farmacias
+
+networks:
+  red_farmacias:
+    driver: bridge
+
+volumes:
+  datos_db:
