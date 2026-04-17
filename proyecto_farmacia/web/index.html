@@ -8,22 +8,26 @@
         body { margin: 0; font-family: 'Segoe UI', sans-serif; }
         #map { height: 100vh; width: 100%; }
         .form-container { 
-            position: absolute; top: 20px; right: 20px; 
-            z-index: 1000; background: white; padding: 20px; 
+            position: absolute; top: 10px; right: 10px; 
+            z-index: 1000; background: white; padding: 15px; 
             border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.3);
-            width: 250px;
+            width: 260px;
         }
-        input, select, button { width: 100%; margin-bottom: 10px; padding: 8px; box-sizing: border-box; }
+        input, select, button { width: 100%; margin-bottom: 8px; padding: 8px; box-sizing: border-box; border-radius: 4px; border: 1px solid #ccc; }
         button { background: #27ae60; color: white; border: none; cursor: pointer; font-weight: bold; }
         button:hover { background: #2ecc71; }
-        h3 { margin-top: 0; font-size: 16px; color: #2c3e50; }
+        .search-box { border: 2px solid #007bff !important; background: #f0f7ff; font-weight: bold; }
+        h3 { margin: 10px 0 5px 0; font-size: 14px; color: #2c3e50; border-bottom: 1px solid #eee; }
+        .coord-label { color: #2980b9; font-size: 11px; font-weight: bold; display: block; }
     </style>
 </head>
 <body>
-
-    <div class="form-container" id="formulario">
+    <div class="form-container">
+        <h3 style="color:#007bff">🔍 BUSCAR LUGAR</h3>
+        <input type="text" id="busqueda" class="search-box" placeholder="Escribe nombre aquí..." onkeyup="buscarLugar()">
+        
         <h3>📍 Registrar Punto</h3>
-        <input type="text" id="nombre" placeholder="Nombre del lugar">
+        <input type="text" id="nombre" placeholder="Nombre">
         <input type="text" id="desc" placeholder="Descripción">
         <select id="cat">
             <option value="Salud">Salud</option>
@@ -31,27 +35,20 @@
             <option value="Cultural">Cultural</option>
             <option value="Servicio">Servicio</option>
         </select>
-        <p style="font-size: 11px; color: #7f8c8d;">Haz clic en el mapa para capturar coordenadas</p>
-        <input type="text" id="coords" readonly placeholder="Lat, Lon (clic en mapa)">
+        <input type="text" id="coords" readonly placeholder="Clic en mapa para coordenadas">
         <button onclick="guardarPunto()">Guardar en DB</button>
     </div>
-
     <div id="map"></div>
-
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         var map = L.map('map').setView([14.48, -90.53], 14);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        var marcadores = [];
+        var tempLat, tempLon, markerTemp;
 
-        var tempLat, tempLon;
-
-        // Al hacer clic, solo capturamos las coordenadas y ponemos un marcador temporal
-        var markerTemp;
         map.on('click', function(e) {
-            tempLat = e.latlng.lat;
-            tempLon = e.latlng.lng;
+            tempLat = e.latlng.lat; tempLon = e.latlng.lng;
             document.getElementById('coords').value = tempLat.toFixed(5) + ", " + tempLon.toFixed(5);
-            
             if(markerTemp) map.removeLayer(markerTemp);
             markerTemp = L.marker([tempLat, tempLon]).addTo(map);
         });
@@ -59,35 +56,34 @@
         function cargarPuntos() {
             fetch('/farmacias').then(r => r.json()).then(data => {
                 data.forEach(p => {
-                    L.marker([p.lat, p.lon]).addTo(map)
-                     .bindPopup("<b>"+p.nombre+"</b><br>"+p.categoria+"<br>"+p.descripcion);
+                    var m = L.marker([p.lat, p.lon]).addTo(map)
+                             .bindPopup("<b>"+p.nombre+"</b><br>"+(p.descripcion || "")+
+                                        "<hr><span class='coord-label'>Coordenadas:</span><small>"+p.lat+", "+p.lon+"</small>");
+                    m.nombreBusqueda = p.nombre.toLowerCase();
+                    marcadores.push(m);
                 });
+            });
+        }
+
+        function buscarLugar() {
+            var txt = document.getElementById('busqueda').value.toLowerCase();
+            marcadores.forEach(m => {
+                if(m.nombreBusqueda.includes(txt)) {
+                    m.setOpacity(1);
+                    if(txt.length > 2 && m.nombreBusqueda.includes(txt)) { map.panTo(m.getLatLng()); }
+                } else { m.setOpacity(0.1); }
             });
         }
 
         function guardarPunto() {
             const nombre = document.getElementById('nombre').value;
-            const desc = document.getElementById('desc').value;
-            const cat = document.getElementById('cat').value;
-
-            if(!nombre || !tempLat) {
-                alert("Por favor pon un nombre y haz clic en el mapa");
-                return;
-            }
-
+            if(!nombre || !tempLat) return alert("Faltan datos");
             fetch('/registrar', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    nombre: nombre, descripcion: desc, categoria: cat,
-                    lat: tempLat, lon: tempLon
-                })
-            }).then(() => {
-                alert("¡Punto guardado exitosamente!");
-                location.reload();
-            });
+                body: JSON.stringify({nombre, descripcion: document.getElementById('desc').value, categoria: document.getElementById('cat').value, lat: tempLat, lon: tempLon})
+            }).then(() => location.reload());
         }
-
         cargarPuntos();
     </script>
 </body>
